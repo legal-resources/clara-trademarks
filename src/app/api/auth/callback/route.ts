@@ -1,14 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get("code");
-
-  if (code) {
-    const supabase = await createClient();
-    await supabase.auth.exchangeCodeForSession(code);
-  }
-
-  return NextResponse.redirect(new URL("/trademarks", requestUrl.origin));
+// Este endpoint ya no se usa con NextAuth — redirige al dashboard
+export async function GET() {
+  return NextResponse.redirect(new URL("/trademarks", process.env.NEXTAUTH_URL || "http://localhost:3000"));
 }
