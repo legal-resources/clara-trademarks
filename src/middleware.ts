@@ -1,30 +1,8 @@
-import { auth } from "@/auth";
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
 
-export default auth((req: NextRequest & { auth: { user?: unknown } | null }) => {
-  const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
-
-  const publicRoutes = ["/login", "/register"];
-  const isPublicRoute = publicRoutes.some((route) =>
-    nextUrl.pathname.startsWith(route)
-  );
-
-  // No autenticado → redirigir al login
-  if (!isLoggedIn && !isPublicRoute) {
-    const loginUrl = new URL("/login", nextUrl.origin);
-    loginUrl.searchParams.set("callbackUrl", nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // Autenticado en ruta de auth → redirigir al dashboard
-  if (isLoggedIn && isPublicRoute) {
-    return NextResponse.redirect(new URL("/trademarks", nextUrl.origin));
-  }
-
-  return NextResponse.next();
-});
+// El middleware usa SOLO la config ligera (sin bcryptjs) → compatible con Edge Runtime
+export default NextAuth(authConfig).auth;
 
 export const config = {
   matcher: [
