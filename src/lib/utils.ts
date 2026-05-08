@@ -1,12 +1,8 @@
-import { type ClassValue } from "clsx";
 import { differenceInDays, format, parseISO, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 
-export function cn(...inputs: ClassValue[]): string {
-  return inputs
-    .flat()
-    .filter(Boolean)
-    .join(" ");
+export function cn(...inputs: (string | undefined | null | false | 0)[]): string {
+  return inputs.filter(Boolean).join(" ");
 }
 
 export function formatDate(dateString: string | null | undefined): string {

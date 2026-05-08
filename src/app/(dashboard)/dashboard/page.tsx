@@ -90,7 +90,7 @@ export default async function DashboardPage() {
                         style={{
                           width: `${Math.max(
                             20,
-                            ((count / (stats.total || 1)) * 120).toFixed(0)
+                            Math.round((count / (stats.total || 1)) * 120)
                           )}px`,
                         }}
                       />
