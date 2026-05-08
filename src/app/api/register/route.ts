@@ -13,6 +13,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Solo se permiten correos @clara.team
+    if (!email.toLowerCase().endsWith("@clara.team")) {
+      return NextResponse.json(
+        { error: "Solo se permiten correos con dominio @clara.team" },
+        { status: 403 }
+      );
+    }
+
     if (password.length < 8) {
       return NextResponse.json(
         { error: "La contraseña debe tener al menos 8 caracteres" },
