@@ -1,19 +1,26 @@
 "use server";
 
+// Clara Trademarks — Server Actions v2
 import { sql } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Trademark, TrademarkStatus } from "@/lib/types";
 
+type SafeSession = {
+  user: { id: string; email?: string | null; name?: string | null };
+};
+
 // ────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────
-async function getSession() {
+async function getSession(): Promise<SafeSession> {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login");
-  // TypeScript no infiere que redirect() lanza — forzamos el tipo
-  return session as { user: { id: string; email: string; name?: string } };
+  if (!session || !session.user || !session.user.id) {
+    redirect("/login");
+    throw new Error("No autenticado"); // nunca se ejecuta, pero TypeScript lo necesita
+  }
+  return session as SafeSession;
 }
 
 function parseDate(value: FormDataEntryValue | null): string | null {
@@ -21,7 +28,7 @@ function parseDate(value: FormDataEntryValue | null): string | null {
   return value as string;
 }
 
-function parseFloat2(value: FormDataEntryValue | null): number | null {
+function parseFloatVal(value: FormDataEntryValue | null): number | null {
   if (!value || value === "") return null;
   const n = parseFloat(value as string);
   return isNaN(n) ? null : n;
@@ -35,89 +42,53 @@ export async function getTrademarks(filters?: {
   country?: string;
   search?: string;
 }) {
-  let query: Trademark[];
+  let rows: unknown[];
 
   if (filters?.search && filters?.status && filters?.country) {
-    query = await sql`
+    rows = await sql`
       SELECT * FROM trademarks
       WHERE is_deleted = false
         AND status = ${filters.status}
         AND country = ${filters.country}
-        AND (
-          name ILIKE ${"%" + filters.search + "%"} OR
-          owner_name ILIKE ${"%" + filters.search + "%"} OR
-          application_number ILIKE ${"%" + filters.search + "%"} OR
-          registration_number ILIKE ${"%" + filters.search + "%"}
-        )
-      ORDER BY created_at DESC
-    ` as Trademark[];
+        AND (name ILIKE ${"%" + filters.search + "%"} OR owner_name ILIKE ${"%" + filters.search + "%"} OR application_number ILIKE ${"%" + filters.search + "%"})
+      ORDER BY created_at DESC`;
   } else if (filters?.search && filters?.status) {
-    query = await sql`
-      SELECT * FROM trademarks
-      WHERE is_deleted = false
-        AND status = ${filters.status}
-        AND (
-          name ILIKE ${"%" + filters.search + "%"} OR
-          owner_name ILIKE ${"%" + filters.search + "%"} OR
-          application_number ILIKE ${"%" + filters.search + "%"} OR
-          registration_number ILIKE ${"%" + filters.search + "%"}
-        )
-      ORDER BY created_at DESC
-    ` as Trademark[];
-  } else if (filters?.search && filters?.country) {
-    query = await sql`
-      SELECT * FROM trademarks
-      WHERE is_deleted = false
-        AND country = ${filters.country}
-        AND (
-          name ILIKE ${"%" + filters.search + "%"} OR
-          owner_name ILIKE ${"%" + filters.search + "%"} OR
-          application_number ILIKE ${"%" + filters.search + "%"} OR
-          registration_number ILIKE ${"%" + filters.search + "%"}
-        )
-      ORDER BY created_at DESC
-    ` as Trademark[];
-  } else if (filters?.status && filters?.country) {
-    query = await sql`
-      SELECT * FROM trademarks
-      WHERE is_deleted = false
-        AND status = ${filters.status}
-        AND country = ${filters.country}
-      ORDER BY created_at DESC
-    ` as Trademark[];
-  } else if (filters?.search) {
-    query = await sql`
-      SELECT * FROM trademarks
-      WHERE is_deleted = false
-        AND (
-          name ILIKE ${"%" + filters.search + "%"} OR
-          owner_name ILIKE ${"%" + filters.search + "%"} OR
-          application_number ILIKE ${"%" + filters.search + "%"} OR
-          registration_number ILIKE ${"%" + filters.search + "%"}
-        )
-      ORDER BY created_at DESC
-    ` as Trademark[];
-  } else if (filters?.status) {
-    query = await sql`
+    rows = await sql`
       SELECT * FROM trademarks
       WHERE is_deleted = false AND status = ${filters.status}
-      ORDER BY created_at DESC
-    ` as Trademark[];
-  } else if (filters?.country) {
-    query = await sql`
+        AND (name ILIKE ${"%" + filters.search + "%"} OR owner_name ILIKE ${"%" + filters.search + "%"})
+      ORDER BY created_at DESC`;
+  } else if (filters?.search && filters?.country) {
+    rows = await sql`
       SELECT * FROM trademarks
       WHERE is_deleted = false AND country = ${filters.country}
-      ORDER BY created_at DESC
-    ` as Trademark[];
-  } else {
-    query = await sql`
+        AND (name ILIKE ${"%" + filters.search + "%"} OR owner_name ILIKE ${"%" + filters.search + "%"})
+      ORDER BY created_at DESC`;
+  } else if (filters?.status && filters?.country) {
+    rows = await sql`
+      SELECT * FROM trademarks
+      WHERE is_deleted = false AND status = ${filters.status} AND country = ${filters.country}
+      ORDER BY created_at DESC`;
+  } else if (filters?.search) {
+    rows = await sql`
       SELECT * FROM trademarks
       WHERE is_deleted = false
-      ORDER BY created_at DESC
-    ` as Trademark[];
+        AND (name ILIKE ${"%" + filters.search + "%"} OR owner_name ILIKE ${"%" + filters.search + "%"} OR application_number ILIKE ${"%" + filters.search + "%"})
+      ORDER BY created_at DESC`;
+  } else if (filters?.status) {
+    rows = await sql`
+      SELECT * FROM trademarks WHERE is_deleted = false AND status = ${filters.status}
+      ORDER BY created_at DESC`;
+  } else if (filters?.country) {
+    rows = await sql`
+      SELECT * FROM trademarks WHERE is_deleted = false AND country = ${filters.country}
+      ORDER BY created_at DESC`;
+  } else {
+    rows = await sql`
+      SELECT * FROM trademarks WHERE is_deleted = false ORDER BY created_at DESC`;
   }
 
-  return query;
+  return rows as Trademark[];
 }
 
 // ────────────────────────────────────────────────
@@ -125,11 +96,8 @@ export async function getTrademarks(filters?: {
 // ────────────────────────────────────────────────
 export async function getTrademark(id: string): Promise<Trademark | null> {
   const rows = await sql`
-    SELECT * FROM trademarks
-    WHERE id = ${id} AND is_deleted = false
-    LIMIT 1
-  `;
-  return (rows[0] as Trademark) || null;
+    SELECT * FROM trademarks WHERE id = ${id} AND is_deleted = false LIMIT 1`;
+  return rows.length > 0 ? (rows[0] as Trademark) : null;
 }
 
 // ────────────────────────────────────────────────
@@ -139,27 +107,22 @@ export async function createTrademark(formData: FormData) {
   const session = await getSession();
   const userId = session.user.id;
 
-  const niceClassesRaw = formData.get("nice_classes") as string;
-  const niceClasses = niceClassesRaw
-    ? niceClassesRaw.split(",").map((c) => parseInt(c.trim())).filter((n) => !isNaN(n))
-    : [];
-
-  const tagsRaw = formData.get("tags") as string;
-  const tags = tagsRaw ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean) : [];
+  const niceClasses = (formData.get("nice_classes") as string || "")
+    .split(",").map((c) => parseInt(c.trim())).filter((n) => !isNaN(n));
+  const tags = (formData.get("tags") as string || "")
+    .split(",").map((t) => t.trim()).filter(Boolean);
 
   const rows = await sql`
     INSERT INTO trademarks (
       name, brand_type, owner_name, country, jurisdiction,
       nice_classes, goods_services_description,
       application_number, registration_number, publication_number,
-      status,
-      filing_date, examination_date, publication_date, opposition_deadline,
-      registration_date, expiration_date, next_renewal_date,
+      status, filing_date, examination_date, publication_date,
+      opposition_deadline, registration_date, expiration_date, next_renewal_date,
       agent_name, agent_email, agent_phone, agent_firm,
       official_fees_paid, fee_payment_date, fee_amount, fee_currency,
       has_priority_claim, priority_country, priority_date, priority_number,
-      notes, tags,
-      created_by, updated_by
+      notes, tags, created_by, updated_by
     ) VALUES (
       ${formData.get("name")},
       ${formData.get("brand_type") || "nominativa"},
@@ -185,26 +148,20 @@ export async function createTrademark(formData: FormData) {
       ${formData.get("agent_firm") || null},
       ${formData.get("official_fees_paid") === "true"},
       ${parseDate(formData.get("fee_payment_date"))},
-      ${parseFloat2(formData.get("fee_amount"))},
+      ${parseFloatVal(formData.get("fee_amount"))},
       ${formData.get("fee_currency") || "USD"},
       ${formData.get("has_priority_claim") === "true"},
       ${formData.get("priority_country") || null},
       ${parseDate(formData.get("priority_date"))},
       ${formData.get("priority_number") || null},
       ${formData.get("notes") || null},
-      ${tags},
-      ${userId},
-      ${userId}
-    )
-    RETURNING id
-  `;
+      ${tags}, ${userId}, ${userId}
+    ) RETURNING id`;
 
   const newId = rows[0].id as string;
-
   await sql`
     INSERT INTO trademark_history (trademark_id, changed_by, action, notes)
-    VALUES (${newId}, ${userId}, 'created', 'Registro creado')
-  `;
+    VALUES (${newId}, ${userId}, 'created', 'Registro creado')`;
 
   revalidatePath("/trademarks");
   redirect(`/trademarks/${newId}`);
@@ -217,13 +174,10 @@ export async function updateTrademark(id: string, formData: FormData) {
   const session = await getSession();
   const userId = session.user.id;
 
-  const niceClassesRaw = formData.get("nice_classes") as string;
-  const niceClasses = niceClassesRaw
-    ? niceClassesRaw.split(",").map((c) => parseInt(c.trim())).filter((n) => !isNaN(n))
-    : [];
-
-  const tagsRaw = formData.get("tags") as string;
-  const tags = tagsRaw ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean) : [];
+  const niceClasses = (formData.get("nice_classes") as string || "")
+    .split(",").map((c) => parseInt(c.trim())).filter((n) => !isNaN(n));
+  const tags = (formData.get("tags") as string || "")
+    .split(",").map((t) => t.trim()).filter(Boolean);
 
   await sql`
     UPDATE trademarks SET
@@ -251,7 +205,7 @@ export async function updateTrademark(id: string, formData: FormData) {
       agent_firm = ${formData.get("agent_firm") || null},
       official_fees_paid = ${formData.get("official_fees_paid") === "true"},
       fee_payment_date = ${parseDate(formData.get("fee_payment_date"))},
-      fee_amount = ${parseFloat2(formData.get("fee_amount"))},
+      fee_amount = ${parseFloatVal(formData.get("fee_amount"))},
       fee_currency = ${formData.get("fee_currency") || "USD"},
       has_priority_claim = ${formData.get("has_priority_claim") === "true"},
       priority_country = ${formData.get("priority_country") || null},
@@ -260,13 +214,11 @@ export async function updateTrademark(id: string, formData: FormData) {
       notes = ${formData.get("notes") || null},
       tags = ${tags},
       updated_by = ${userId}
-    WHERE id = ${id} AND is_deleted = false
-  `;
+    WHERE id = ${id} AND is_deleted = false`;
 
   await sql`
     INSERT INTO trademark_history (trademark_id, changed_by, action, notes)
-    VALUES (${id}, ${userId}, 'updated', 'Registro actualizado')
-  `;
+    VALUES (${id}, ${userId}, 'updated', 'Registro actualizado')`;
 
   revalidatePath(`/trademarks/${id}`);
   revalidatePath("/trademarks");
@@ -280,16 +232,10 @@ export async function deleteTrademark(id: string) {
   const session = await getSession();
   const userId = session.user.id;
 
-  await sql`
-    UPDATE trademarks
-    SET is_deleted = true, updated_by = ${userId}
-    WHERE id = ${id}
-  `;
-
+  await sql`UPDATE trademarks SET is_deleted = true, updated_by = ${userId} WHERE id = ${id}`;
   await sql`
     INSERT INTO trademark_history (trademark_id, changed_by, action, notes)
-    VALUES (${id}, ${userId}, 'deleted', 'Registro eliminado')
-  `;
+    VALUES (${id}, ${userId}, 'deleted', 'Registro eliminado')`;
 
   revalidatePath("/trademarks");
   redirect("/trademarks");
@@ -300,31 +246,28 @@ export async function deleteTrademark(id: string) {
 // ────────────────────────────────────────────────
 export async function getTrademarkStats() {
   const rows = await sql`
-    SELECT status, expiration_date, next_renewal_date
-    FROM trademarks
-    WHERE is_deleted = false
-  `;
+    SELECT status, expiration_date, next_renewal_date FROM trademarks WHERE is_deleted = false`;
 
   const total = rows.length;
   const registered = rows.filter((t) => t.status === "registrada").length;
   const pending = rows.filter((t) =>
-    ["solicitud_presentada", "en_examen", "publicada", "periodo_oposicion"].includes(t.status as string)
+    ["solicitud_presentada","en_examen","publicada","periodo_oposicion"].includes(t.status as string)
   ).length;
 
   const today = new Date();
-  const in90Days = new Date(today);
-  in90Days.setDate(in90Days.getDate() + 90);
+  const in90 = new Date(today);
+  in90.setDate(in90.getDate() + 90);
 
   const expiringsSoon = rows.filter((t) => {
-    const dateStr = (t.expiration_date || t.next_renewal_date) as string | null;
-    if (!dateStr) return false;
-    const d = new Date(dateStr);
-    return d >= today && d <= in90Days;
+    const d = (t.expiration_date || t.next_renewal_date) as string | null;
+    if (!d) return false;
+    const date = new Date(d);
+    return date >= today && date <= in90;
   }).length;
 
   const byStatus = rows.reduce((acc, t) => {
-    const key = t.status as string;
-    acc[key] = (acc[key] || 0) + 1;
+    const k = t.status as string;
+    acc[k] = (acc[k] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
@@ -336,10 +279,7 @@ export async function getTrademarkStats() {
 // ────────────────────────────────────────────────
 export async function getTrademarkHistory(trademarkId: string) {
   const rows = await sql`
-    SELECT * FROM trademark_history
-    WHERE trademark_id = ${trademarkId}
-    ORDER BY changed_at DESC
-    LIMIT 50
-  `;
+    SELECT * FROM trademark_history WHERE trademark_id = ${trademarkId}
+    ORDER BY changed_at DESC LIMIT 50`;
   return rows;
 }
