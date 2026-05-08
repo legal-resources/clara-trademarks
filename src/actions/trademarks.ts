@@ -12,7 +12,8 @@ import type { Trademark, TrademarkStatus } from "@/lib/types";
 async function getSession() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
-  return session;
+  // TypeScript no infiere que redirect() lanza — forzamos el tipo
+  return session as { user: { id: string; email: string; name?: string } };
 }
 
 function parseDate(value: FormDataEntryValue | null): string | null {
