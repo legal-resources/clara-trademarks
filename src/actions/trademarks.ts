@@ -5,7 +5,7 @@ import { sql } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Trademark, TrademarkStatus } from "@/lib/types";
+import type { Trademark, TrademarkHistory, TrademarkStatus } from "@/lib/types";
 
 type SafeSession = {
   user: { id: string; email?: string | null; name?: string | null };
@@ -277,9 +277,9 @@ export async function getTrademarkStats() {
 // ────────────────────────────────────────────────
 // HISTORY
 // ────────────────────────────────────────────────
-export async function getTrademarkHistory(trademarkId: string) {
+export async function getTrademarkHistory(trademarkId: string): Promise<TrademarkHistory[]> {
   const rows = await sql`
     SELECT * FROM trademark_history WHERE trademark_id = ${trademarkId}
     ORDER BY changed_at DESC LIMIT 50`;
-  return rows;
+  return rows as unknown as TrademarkHistory[];
 }
