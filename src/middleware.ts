@@ -6,8 +6,11 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const { nextUrl } = request;
 
-  // NextAuth guarda la sesión en estas cookies (http en dev, https en prod)
+  // NextAuth v5 (Auth.js) usa "authjs.session-token"
+  // Se incluyen también los nombres de v4 como fallback
   const sessionToken =
+    request.cookies.get("authjs.session-token") ??
+    request.cookies.get("__Secure-authjs.session-token") ??
     request.cookies.get("next-auth.session-token") ??
     request.cookies.get("__Secure-next-auth.session-token");
 
