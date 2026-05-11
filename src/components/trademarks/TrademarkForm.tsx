@@ -8,7 +8,6 @@ import {
   STATUS_LABELS,
   BRAND_TYPE_LABELS,
   COUNTRIES,
-  JURISDICTIONS,
   NICE_CLASSES,
 } from "@/lib/types";
 
@@ -21,12 +20,9 @@ interface Props {
 export default function TrademarkForm({ trademark, action, isEdit = false }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [selectedCountry, setSelectedCountry] = useState(trademark?.country || "");
   const [selectedClasses, setSelectedClasses] = useState<number[]>(
     trademark?.nice_classes || []
   );
-  const [hasPriority, setHasPriority] = useState(trademark?.has_priority_claim || false);
-  const [feesPaid, setFeesPaid] = useState(trademark?.official_fees_paid || false);
 
   const toggleClass = (classNum: number) => {
     setSelectedClasses((prev) =>
@@ -42,8 +38,6 @@ export default function TrademarkForm({ trademark, action, isEdit = false }: Pro
     try {
       const formData = new FormData(e.currentTarget);
       formData.set("nice_classes", selectedClasses.join(","));
-      formData.set("has_priority_claim", hasPriority.toString());
-      formData.set("official_fees_paid", feesPaid.toString());
       await action(formData);
     } catch (err) {
       toast.error((err as Error).message || "Error al guardar");
@@ -53,6 +47,7 @@ export default function TrademarkForm({ trademark, action, isEdit = false }: Pro
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+
       {/* ── Información básica ── */}
       <Section title="Información Básica">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -75,9 +70,7 @@ export default function TrademarkForm({ trademark, action, isEdit = false }: Pro
               defaultValue={trademark?.brand_type || "nominativa"}
             >
               {Object.entries(BRAND_TYPE_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
+                <option key={key} value={key}>{label}</option>
               ))}
             </select>
           </div>
@@ -100,52 +93,27 @@ export default function TrademarkForm({ trademark, action, isEdit = false }: Pro
               defaultValue={trademark?.status || "solicitud_presentada"}
             >
               {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
+                <option key={key} value={key}>{label}</option>
               ))}
             </select>
           </div>
         </div>
       </Section>
 
-      {/* ── Jurisdicción ── */}
-      <Section title="Jurisdicción">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="label">País *</label>
-            <select
-              name="country"
-              className="input-field"
-              value={selectedCountry}
-              onChange={(e) => {
-                setSelectedCountry(e.target.value);
-              }}
-              required
-            >
-              <option value="">Seleccionar país...</option>
-              {COUNTRIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Oficina / Jurisdicción</label>
-            <input
-              name="jurisdiction"
-              type="text"
-              className="input-field"
-              value={
-                selectedCountry
-                  ? JURISDICTIONS[selectedCountry] || ""
-                  : trademark?.jurisdiction || ""
-              }
-              onChange={() => {}}
-              placeholder="ej. IMPI, USPTO"
-            />
-          </div>
+      {/* ── País ── */}
+      <Section title="País">
+        <div className="max-w-xs">
+          <label className="label">País</label>
+          <select
+            name="country"
+            className="input-field"
+            defaultValue={trademark?.country || ""}
+          >
+            <option value="">Seleccionar país...</option>
+            {COUNTRIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </div>
       </Section>
 
@@ -234,203 +202,11 @@ export default function TrademarkForm({ trademark, action, isEdit = false }: Pro
 
       {/* ── Fechas ── */}
       <Section title="Fechas Clave">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <DateField
-            name="filing_date"
-            label="Fecha de Presentación"
-            defaultValue={trademark?.filing_date}
-          />
-          <DateField
-            name="examination_date"
-            label="Fecha de Examen"
-            defaultValue={trademark?.examination_date}
-          />
-          <DateField
-            name="publication_date"
-            label="Fecha de Publicación"
-            defaultValue={trademark?.publication_date}
-          />
-          <DateField
-            name="opposition_deadline"
-            label="Fecha Límite de Oposición"
-            defaultValue={trademark?.opposition_deadline}
-          />
-          <DateField
-            name="registration_date"
-            label="Fecha de Registro"
-            defaultValue={trademark?.registration_date}
-          />
-          <DateField
-            name="expiration_date"
-            label="Fecha de Vencimiento"
-            defaultValue={trademark?.expiration_date}
-          />
-          <DateField
-            name="next_renewal_date"
-            label="Próxima Renovación"
-            defaultValue={trademark?.next_renewal_date}
-          />
-        </div>
-      </Section>
-
-      {/* ── Agente ── */}
-      <Section title="Agente / Abogado">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="label">Nombre del Agente</label>
-            <input
-              name="agent_name"
-              type="text"
-              className="input-field"
-              defaultValue={trademark?.agent_name || ""}
-              placeholder="Nombre completo"
-            />
-          </div>
-          <div>
-            <label className="label">Firma / Despacho</label>
-            <input
-              name="agent_firm"
-              type="text"
-              className="input-field"
-              defaultValue={trademark?.agent_firm || ""}
-              placeholder="Nombre del despacho"
-            />
-          </div>
-          <div>
-            <label className="label">Email del Agente</label>
-            <input
-              name="agent_email"
-              type="email"
-              className="input-field"
-              defaultValue={trademark?.agent_email || ""}
-              placeholder="agente@despacho.com"
-            />
-          </div>
-          <div>
-            <label className="label">Teléfono del Agente</label>
-            <input
-              name="agent_phone"
-              type="tel"
-              className="input-field"
-              defaultValue={trademark?.agent_phone || ""}
-              placeholder="+52 55 1234 5678"
-            />
-          </div>
-        </div>
-      </Section>
-
-      {/* ── Información financiera ── */}
-      <Section title="Información Financiera">
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setFeesPaid(!feesPaid)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                feesPaid ? "bg-green-500" : "bg-gray-300"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  feesPaid ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
-            <label className="text-sm font-medium text-gray-700">
-              Tasas oficiales pagadas
-            </label>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <DateField
-              name="fee_payment_date"
-              label="Fecha de Pago"
-              defaultValue={trademark?.fee_payment_date}
-            />
-            <div>
-              <label className="label">Monto</label>
-              <input
-                name="fee_amount"
-                type="number"
-                step="0.01"
-                className="input-field"
-                defaultValue={trademark?.fee_amount || ""}
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <label className="label">Moneda</label>
-              <select
-                name="fee_currency"
-                className="input-field"
-                defaultValue={trademark?.fee_currency || "USD"}
-              >
-                <option value="USD">USD</option>
-                <option value="MXN">MXN</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-                <option value="BRL">BRL</option>
-                <option value="COP">COP</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </Section>
-
-      {/* ── Prioridad ── */}
-      <Section title="Prioridad (Convenio de París)">
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setHasPriority(!hasPriority)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                hasPriority ? "bg-clara-500" : "bg-gray-300"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  hasPriority ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
-            <label className="text-sm font-medium text-gray-700">
-              Tiene reclamación de prioridad
-            </label>
-          </div>
-          {hasPriority && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 p-4 rounded-lg">
-              <div>
-                <label className="label">País de Prioridad</label>
-                <select
-                  name="priority_country"
-                  className="input-field"
-                  defaultValue={trademark?.priority_country || ""}
-                >
-                  <option value="">Seleccionar...</option>
-                  {COUNTRIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <DateField
-                name="priority_date"
-                label="Fecha de Prioridad"
-                defaultValue={trademark?.priority_date}
-              />
-              <div>
-                <label className="label">Número de Prioridad</label>
-                <input
-                  name="priority_number"
-                  type="text"
-                  className="input-field"
-                  defaultValue={trademark?.priority_number || ""}
-                  placeholder="ej. US2024-001"
-                />
-              </div>
-            </div>
-          )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <DateField name="filing_date" label="Fecha de Solicitud" defaultValue={trademark?.filing_date} />
+          <DateField name="registration_date" label="Fecha de Registro" defaultValue={trademark?.registration_date} />
+          <DateField name="expiration_date" label="Fecha de Vencimiento" defaultValue={trademark?.expiration_date} />
+          <DateField name="next_renewal_date" label="Próxima Renovación" defaultValue={trademark?.next_renewal_date} />
         </div>
       </Section>
 
@@ -455,20 +231,14 @@ export default function TrademarkForm({ trademark, action, isEdit = false }: Pro
               defaultValue={trademark?.tags?.join(", ") || ""}
               placeholder="ej. prioritaria, renovar-2025, latam"
             />
-            <p className="text-xs text-gray-400 mt-1">
-              Útil para organizar y filtrar registros
-            </p>
+            <p className="text-xs text-gray-400 mt-1">Útil para organizar y filtrar registros</p>
           </div>
         </div>
       </Section>
 
       {/* Buttons */}
       <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
-        <button
-          type="button"
-          onClick={() => router.back()}
-          className="btn-secondary"
-        >
+        <button type="button" onClick={() => router.back()} className="btn-secondary">
           Cancelar
         </button>
         <button type="submit" className="btn-primary" disabled={loading}>
