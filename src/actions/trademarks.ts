@@ -28,12 +28,6 @@ function parseDate(value: FormDataEntryValue | null): string | null {
   return value as string;
 }
 
-function parseFloatVal(value: FormDataEntryValue | null): number | null {
-  if (!value || value === "") return null;
-  const n = parseFloat(value as string);
-  return isNaN(n) ? null : n;
-}
-
 // ────────────────────────────────────────────────
 // GET TRADEMARKS
 // ────────────────────────────────────────────────
@@ -114,21 +108,16 @@ export async function createTrademark(formData: FormData) {
 
   const rows = await sql`
     INSERT INTO trademarks (
-      name, brand_type, owner_name, country, jurisdiction,
+      name, brand_type, owner_name, country,
       nice_classes, goods_services_description,
       application_number, registration_number, publication_number,
-      status, filing_date, examination_date, publication_date,
-      opposition_deadline, registration_date, expiration_date, next_renewal_date,
-      agent_name, agent_email, agent_phone, agent_firm,
-      official_fees_paid, fee_payment_date, fee_amount, fee_currency,
-      has_priority_claim, priority_country, priority_date, priority_number,
+      status, filing_date, registration_date, expiration_date, next_renewal_date,
       notes, tags, created_by, updated_by
     ) VALUES (
       ${formData.get("name")},
       ${formData.get("brand_type") || "nominativa"},
       ${formData.get("owner_name")},
-      ${formData.get("country")},
-      ${formData.get("jurisdiction") || null},
+      ${formData.get("country") || ""},
       ${niceClasses},
       ${formData.get("goods_services_description") || null},
       ${formData.get("application_number") || null},
@@ -136,24 +125,9 @@ export async function createTrademark(formData: FormData) {
       ${formData.get("publication_number") || null},
       ${formData.get("status") || "solicitud_presentada"},
       ${parseDate(formData.get("filing_date"))},
-      ${parseDate(formData.get("examination_date"))},
-      ${parseDate(formData.get("publication_date"))},
-      ${parseDate(formData.get("opposition_deadline"))},
       ${parseDate(formData.get("registration_date"))},
       ${parseDate(formData.get("expiration_date"))},
       ${parseDate(formData.get("next_renewal_date"))},
-      ${formData.get("agent_name") || null},
-      ${formData.get("agent_email") || null},
-      ${formData.get("agent_phone") || null},
-      ${formData.get("agent_firm") || null},
-      ${formData.get("official_fees_paid") === "true"},
-      ${parseDate(formData.get("fee_payment_date"))},
-      ${parseFloatVal(formData.get("fee_amount"))},
-      ${formData.get("fee_currency") || "USD"},
-      ${formData.get("has_priority_claim") === "true"},
-      ${formData.get("priority_country") || null},
-      ${parseDate(formData.get("priority_date"))},
-      ${formData.get("priority_number") || null},
       ${formData.get("notes") || null},
       ${tags}, ${userId}, ${userId}
     ) RETURNING id`;
@@ -184,33 +158,17 @@ export async function updateTrademark(id: string, formData: FormData) {
       name = ${formData.get("name")},
       brand_type = ${formData.get("brand_type") || "nominativa"},
       owner_name = ${formData.get("owner_name")},
-      country = ${formData.get("country")},
-      jurisdiction = ${formData.get("jurisdiction") || null},
+      country = ${formData.get("country") || ""},
       nice_classes = ${niceClasses},
       goods_services_description = ${formData.get("goods_services_description") || null},
       application_number = ${formData.get("application_number") || null},
       registration_number = ${formData.get("registration_number") || null},
       publication_number = ${formData.get("publication_number") || null},
-      status = ${formData.get("status")},
+      status = ${formData.get("status") || "solicitud_presentada"},
       filing_date = ${parseDate(formData.get("filing_date"))},
-      examination_date = ${parseDate(formData.get("examination_date"))},
-      publication_date = ${parseDate(formData.get("publication_date"))},
-      opposition_deadline = ${parseDate(formData.get("opposition_deadline"))},
       registration_date = ${parseDate(formData.get("registration_date"))},
       expiration_date = ${parseDate(formData.get("expiration_date"))},
       next_renewal_date = ${parseDate(formData.get("next_renewal_date"))},
-      agent_name = ${formData.get("agent_name") || null},
-      agent_email = ${formData.get("agent_email") || null},
-      agent_phone = ${formData.get("agent_phone") || null},
-      agent_firm = ${formData.get("agent_firm") || null},
-      official_fees_paid = ${formData.get("official_fees_paid") === "true"},
-      fee_payment_date = ${parseDate(formData.get("fee_payment_date"))},
-      fee_amount = ${parseFloatVal(formData.get("fee_amount"))},
-      fee_currency = ${formData.get("fee_currency") || "USD"},
-      has_priority_claim = ${formData.get("has_priority_claim") === "true"},
-      priority_country = ${formData.get("priority_country") || null},
-      priority_date = ${parseDate(formData.get("priority_date"))},
-      priority_number = ${formData.get("priority_number") || null},
       notes = ${formData.get("notes") || null},
       tags = ${tags},
       updated_by = ${userId}
@@ -302,15 +260,6 @@ function toDate(val: string): string | null {
   return val.trim();
 }
 
-function toFloat(val: string): number | null {
-  const n = parseFloat(val);
-  return isNaN(n) ? null : n;
-}
-
-function toBool(val: string): boolean {
-  return val?.toLowerCase().trim() === "true";
-}
-
 export async function importTrademarks(formData: FormData): Promise<{
   success: number;
   errors: string[];
@@ -337,7 +286,6 @@ export async function importTrademarks(formData: FormData): Promise<{
 
       if (!row["nombre"]) { results.errors.push(`Fila ${i + 1}: campo "nombre" es requerido`); continue; }
       if (!row["titular"]) { results.errors.push(`Fila ${i + 1}: campo "titular" es requerido`); continue; }
-      if (!row["pais"]) { results.errors.push(`Fila ${i + 1}: campo "pais" es requerido`); continue; }
 
       const niceClasses = row["clases_niza"]
         ? row["clases_niza"].split(",").map((c) => parseInt(c.trim())).filter((n) => !isNaN(n))
@@ -356,21 +304,16 @@ export async function importTrademarks(formData: FormData): Promise<{
 
       const inserted = await sql`
         INSERT INTO trademarks (
-          name, brand_type, owner_name, country, jurisdiction,
+          name, brand_type, owner_name, country,
           nice_classes, goods_services_description,
           application_number, registration_number, publication_number,
-          status, filing_date, examination_date, publication_date,
-          opposition_deadline, registration_date, expiration_date, next_renewal_date,
-          agent_name, agent_email, agent_phone, agent_firm,
-          official_fees_paid, fee_payment_date, fee_amount, fee_currency,
-          has_priority_claim, priority_country, priority_date, priority_number,
+          status, filing_date, registration_date, expiration_date, next_renewal_date,
           notes, tags, created_by, updated_by
         ) VALUES (
           ${row["nombre"]},
           ${row["tipo_marca"] || "nominativa"},
           ${row["titular"]},
-          ${row["pais"]},
-          ${row["jurisdiccion"] || null},
+          ${row["pais"] || ""},
           ${niceClasses},
           ${row["descripcion"] || null},
           ${row["numero_solicitud"] || null},
@@ -378,24 +321,9 @@ export async function importTrademarks(formData: FormData): Promise<{
           ${row["numero_publicacion"] || null},
           ${status},
           ${toDate(row["fecha_solicitud"])},
-          ${toDate(row["fecha_examen"])},
-          ${toDate(row["fecha_publicacion"])},
-          ${toDate(row["fecha_limite_oposicion"])},
           ${toDate(row["fecha_registro"])},
           ${toDate(row["fecha_vencimiento"])},
           ${toDate(row["proxima_renovacion"])},
-          ${row["agente"] || null},
-          ${row["correo_agente"] || null},
-          ${row["telefono_agente"] || null},
-          ${row["firma_agente"] || null},
-          ${toBool(row["tasas_pagadas"])},
-          ${toDate(row["fecha_pago"])},
-          ${toFloat(row["monto"])},
-          ${row["moneda"] || "USD"},
-          ${toBool(row["tiene_prioridad"])},
-          ${row["pais_prioridad"] || null},
-          ${toDate(row["fecha_prioridad"])},
-          ${row["numero_prioridad"] || null},
           ${row["notas"] || null},
           ${tags},
           ${userId}, ${userId}
