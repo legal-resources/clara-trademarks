@@ -275,6 +275,147 @@ export async function getTrademarkStats() {
 }
 
 // ────────────────────────────────────────────────
+// IMPORT CSV
+// ────────────────────────────────────────────────
+
+function parseCSVLine(line: string): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      result.push(current.trim()); current = "";
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+function toDate(val: string): string | null {
+  if (!val || val.trim() === "") return null;
+  return val.trim();
+}
+
+function toFloat(val: string): number | null {
+  const n = parseFloat(val);
+  return isNaN(n) ? null : n;
+}
+
+function toBool(val: string): boolean {
+  return val?.toLowerCase().trim() === "true";
+}
+
+export async function importTrademarks(formData: FormData): Promise<{
+  success: number;
+  errors: string[];
+}> {
+  const session = await getSession();
+  const userId = session.user.id;
+
+  const file = formData.get("csv") as File | null;
+  if (!file) return { success: 0, errors: ["No se adjuntó ningún archivo"] };
+
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length < 2) return { success: 0, errors: ["El archivo está vacío o solo tiene el encabezado"] };
+
+  const headers = parseCSVLine(lines[0]).map((h) => h.toLowerCase().trim());
+
+  const results = { success: 0, errors: [] as string[] };
+
+  for (let i = 1; i < lines.length; i++) {
+    try {
+      const values = parseCSVLine(lines[i]);
+      const row: Record<string, string> = {};
+      headers.forEach((h, idx) => { row[h] = values[idx] ?? ""; });
+
+      if (!row["nombre"]) { results.errors.push(`Fila ${i + 1}: campo "nombre" es requerido`); continue; }
+      if (!row["titular"]) { results.errors.push(`Fila ${i + 1}: campo "titular" es requerido`); continue; }
+      if (!row["pais"]) { results.errors.push(`Fila ${i + 1}: campo "pais" es requerido`); continue; }
+
+      const niceClasses = row["clases_niza"]
+        ? row["clases_niza"].split(",").map((c) => parseInt(c.trim())).filter((n) => !isNaN(n))
+        : [];
+      const tags = row["etiquetas"]
+        ? row["etiquetas"].split(",").map((t) => t.trim()).filter(Boolean)
+        : [];
+
+      const validStatuses: TrademarkStatus[] = [
+        "solicitud_presentada","en_examen","publicada","periodo_oposicion",
+        "registrada","rechazada","abandonada","vencida","en_renovacion","suspendida",
+      ];
+      const status: TrademarkStatus = validStatuses.includes(row["estado"] as TrademarkStatus)
+        ? (row["estado"] as TrademarkStatus)
+        : "solicitud_presentada";
+
+      const inserted = await sql`
+        INSERT INTO trademarks (
+          name, brand_type, owner_name, country, jurisdiction,
+          nice_classes, goods_services_description,
+          application_number, registration_number, publication_number,
+          status, filing_date, examination_date, publication_date,
+          opposition_deadline, registration_date, expiration_date, next_renewal_date,
+          agent_name, agent_email, agent_phone, agent_firm,
+          official_fees_paid, fee_payment_date, fee_amount, fee_currency,
+          has_priority_claim, priority_country, priority_date, priority_number,
+          notes, tags, created_by, updated_by
+        ) VALUES (
+          ${row["nombre"]},
+          ${row["tipo_marca"] || "nominativa"},
+          ${row["titular"]},
+          ${row["pais"]},
+          ${row["jurisdiccion"] || null},
+          ${niceClasses},
+          ${row["descripcion"] || null},
+          ${row["numero_solicitud"] || null},
+          ${row["numero_registro"] || null},
+          ${row["numero_publicacion"] || null},
+          ${status},
+          ${toDate(row["fecha_solicitud"])},
+          ${toDate(row["fecha_examen"])},
+          ${toDate(row["fecha_publicacion"])},
+          ${toDate(row["fecha_limite_oposicion"])},
+          ${toDate(row["fecha_registro"])},
+          ${toDate(row["fecha_vencimiento"])},
+          ${toDate(row["proxima_renovacion"])},
+          ${row["agente"] || null},
+          ${row["correo_agente"] || null},
+          ${row["telefono_agente"] || null},
+          ${row["firma_agente"] || null},
+          ${toBool(row["tasas_pagadas"])},
+          ${toDate(row["fecha_pago"])},
+          ${toFloat(row["monto"])},
+          ${row["moneda"] || "USD"},
+          ${toBool(row["tiene_prioridad"])},
+          ${row["pais_prioridad"] || null},
+          ${toDate(row["fecha_prioridad"])},
+          ${row["numero_prioridad"] || null},
+          ${row["notas"] || null},
+          ${tags},
+          ${userId}, ${userId}
+        ) RETURNING id`;
+
+      await sql`
+        INSERT INTO trademark_history (trademark_id, changed_by, action, notes)
+        VALUES (${inserted[0].id as string}, ${userId}, 'created', 'Importado por CSV')`;
+
+      results.success++;
+    } catch (err) {
+      results.errors.push(`Fila ${i + 1}: ${(err as Error).message}`);
+    }
+  }
+
+  revalidatePath("/trademarks");
+  return results;
+}
+
+// ────────────────────────────────────────────────
 // HISTORY
 // ────────────────────────────────────────────────
 export async function getTrademarkHistory(trademarkId: string): Promise<TrademarkHistory[]> {
